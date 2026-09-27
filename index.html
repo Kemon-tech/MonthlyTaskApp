@@ -48,6 +48,24 @@
       </header>
 
       <main class="grid">
+        <aside class="panel summary-panel">
+          <h2>Overview</h2>
+          <div class="summary-cards">
+            <div class="summary-card income">
+              <span class="summary-label">Income</span>
+              <strong id="incomeTotal" class="summary-amount">$0.00</strong>
+            </div>
+            <div class="summary-card expense">
+              <span class="summary-label">Expenses</span>
+              <strong id="expenseTotal" class="summary-amount">$0.00</strong>
+            </div>
+            <div class="summary-card net">
+              <span class="summary-label">Net</span>
+              <strong id="netTotal" class="summary-amount">$0.00</strong>
+            </div>
+          </div>
+        </aside>
+
         <section class="panel form-panel">
           <h2>Add income or expense</h2>
           <form id="entryForm">
@@ -110,24 +128,6 @@
             </div>
           </form>
         </section>
-
-        <aside class="panel summary-panel">
-          <h2>Overview</h2>
-          <div class="summary-cards">
-            <div class="summary-card income">
-              <span class="summary-label">Income</span>
-              <strong id="incomeTotal" class="summary-amount">$0.00</strong>
-            </div>
-            <div class="summary-card expense">
-              <span class="summary-label">Expenses</span>
-              <strong id="expenseTotal" class="summary-amount">$0.00</strong>
-            </div>
-            <div class="summary-card net">
-              <span class="summary-label">Net</span>
-              <strong id="netTotal" class="summary-amount">$0.00</strong>
-            </div>
-          </div>
-        </aside>
       </main>
 
       <section class="panel list-panel">
