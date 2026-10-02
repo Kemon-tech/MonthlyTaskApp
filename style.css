@@ -13,6 +13,9 @@
   --input-bg: rgba(255, 255, 255, 1);
   --ghost-bg: rgba(63, 94, 241, 0.08);
   --delete-bg: rgba(217, 78, 112, 0.09);
+  --warning: #b26b00;
+  --paid-bg: rgba(22, 154, 103, 0.12);
+  --dialog-bg: #ffffff;
 }
 
 body[data-theme='dark'] {
@@ -29,6 +32,9 @@ body[data-theme='dark'] {
   --input-bg: rgba(9, 15, 27, 0.9);
   --ghost-bg: rgba(138, 180, 255, 0.08);
   --delete-bg: rgba(255, 138, 164, 0.12);
+  --warning: #f6c560;
+  --paid-bg: rgba(84, 209, 156, 0.14);
+  --dialog-bg: #111c2e;
 }
 
 * {
@@ -117,6 +123,38 @@ h2 {
   background: rgba(12, 21, 36, 0.8);
   color: #f4f7ff;
   color-scheme: dark;
+}
+
+.upcoming-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 12px;
+  padding: 10px 12px;
+  background: rgba(12, 21, 36, 0.8);
+  color: #f4f7ff;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.upcoming-btn.has-due {
+  border-color: rgba(246, 197, 96, 0.7);
+}
+
+.upcoming-btn:hover {
+  background: rgba(30, 41, 59, 0.95);
+}
+
+.upcoming-count {
+  min-width: 22px;
+  padding: 2px 7px;
+  border-radius: 999px;
+  background: #f6c560;
+  color: #0f172a;
+  font-size: 12px;
+  text-align: center;
 }
 
 /* ---------- Layout ---------- */
@@ -309,6 +347,37 @@ button:focus-visible {
   color: var(--primary);
 }
 
+.summary-card.paid {
+  border-color: rgba(26, 157, 92, 0.2);
+  color: var(--success);
+}
+
+.summary-card.remaining {
+  border-color: rgba(178, 107, 0, 0.25);
+  color: var(--warning);
+}
+
+.paid-progress {
+  height: 6px;
+  margin-top: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.paid-progress span {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: var(--success);
+  transition: width 0.3s ease;
+}
+
+.paid-progress-text {
+  font-size: 13px;
+  color: var(--muted);
+}
+
 .summary-label {
   font-size: 13px;
   font-weight: 700;
@@ -424,6 +493,77 @@ button:focus-visible {
   color: var(--primary);
 }
 
+.badge.paid {
+  background: var(--paid-bg);
+  color: var(--success);
+}
+
+.badge.paid-partial {
+  background: transparent;
+  border: 1px solid var(--success);
+  color: var(--success);
+}
+
+/* ---------- Paid toggles ---------- */
+
+.paid-btn,
+.paid-chip {
+  border: 1px solid var(--success);
+  background: transparent;
+  color: var(--success);
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: transform 0.15s ease, background 0.2s ease;
+}
+
+.paid-btn {
+  padding: 9px 12px;
+  border-radius: 12px;
+}
+
+.paid-chip {
+  padding: 4px 10px;
+  border-radius: 999px;
+  font-size: 13px;
+}
+
+.paid-btn:hover,
+.paid-chip:hover {
+  transform: translateY(-1px);
+  background: var(--paid-bg);
+}
+
+.paid-btn.is-paid,
+.paid-chip.is-paid {
+  background: var(--success);
+  color: var(--dialog-bg);
+}
+
+.paid-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+  margin-top: 6px;
+}
+
+.paid-row-label {
+  font-size: 13px;
+  color: var(--muted);
+}
+
+.entry-item.is-paid,
+.upcoming-item.is-paid {
+  border-color: var(--success);
+}
+
+.entry-item.is-paid .amount-value,
+.upcoming-item.is-paid .amount-value {
+  text-decoration: line-through;
+  opacity: 0.6;
+}
+
 .amount-block {
   display: flex;
   flex-direction: column;
@@ -472,6 +612,50 @@ button:focus-visible {
   margin-top: 14px;
 }
 
+/* ---------- Upcoming dialog ---------- */
+
+.upcoming-dialog {
+  width: min(560px, calc(100vw - 32px));
+  max-height: calc(100vh - 64px);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 20px;
+  background: var(--dialog-bg);
+  color: var(--text);
+}
+
+.upcoming-dialog::backdrop {
+  background: rgba(2, 6, 23, 0.55);
+}
+
+.dialog-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.dialog-sub {
+  margin: 6px 0 16px;
+  color: var(--muted);
+}
+
+.upcoming-list {
+  display: grid;
+  gap: 10px;
+}
+
+.upcoming-item {
+  display: grid;
+  grid-template-columns: 1fr auto auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px 14px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--panel-alt);
+}
+
 /* ---------- Mobile ---------- */
 
 @media (max-width: 760px) {
@@ -493,5 +677,13 @@ button:focus-visible {
   .list-header {
     flex-direction: column;
     align-items: flex-start;
+  }
+
+  .upcoming-item {
+    grid-template-columns: 1fr auto;
+  }
+
+  .upcoming-item .entry-main {
+    grid-column: 1 / -1;
   }
 }

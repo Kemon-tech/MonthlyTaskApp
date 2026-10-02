@@ -22,6 +22,10 @@
           <h1>Monthly Budget Planner</h1>
         </div>
         <div class="header-controls">
+          <div class="header-picker">
+            <span>Upcoming</span>
+            <button id="upcomingBtn" class="upcoming-btn" type="button" aria-haspopup="dialog">Nothing due</button>
+          </div>
           <label class="header-picker">
             <span>Theme</span>
             <select id="themeMode">
@@ -62,6 +66,16 @@
             <div class="summary-card net">
               <span class="summary-label">Net</span>
               <strong id="netTotal" class="summary-amount">$0.00</strong>
+            </div>
+            <div class="summary-card paid">
+              <span class="summary-label">Paid so far</span>
+              <strong id="paidTotal" class="summary-amount">$0.00</strong>
+            </div>
+            <div class="summary-card remaining">
+              <span class="summary-label">Remaining to pay</span>
+              <strong id="remainingTotal" class="summary-amount">$0.00</strong>
+              <div class="paid-progress" aria-hidden="true"><span id="paidProgressBar"></span></div>
+              <span id="paidProgressText" class="paid-progress-text"></span>
             </div>
           </div>
         </aside>
@@ -138,6 +152,15 @@
         <div id="entriesList" class="entries-list" aria-live="polite"></div>
       </section>
     </div>
+
+    <dialog id="upcomingDialog" class="upcoming-dialog" aria-labelledby="upcomingTitle">
+      <div class="dialog-header">
+        <h2 id="upcomingTitle">Upcoming payments</h2>
+        <button id="closeUpcomingBtn" class="ghost-btn" type="button" aria-label="Close">✕</button>
+      </div>
+      <p class="dialog-sub">Expenses due in the next 5 days</p>
+      <div id="upcomingList" class="upcoming-list"></div>
+    </dialog>
 
     <script src="script.js"></script>
     <script>

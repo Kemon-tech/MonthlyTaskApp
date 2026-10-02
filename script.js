@@ -15,6 +15,7 @@ const CATEGORIES = {
   ],
 };
 const MS_PER_DAY = 86400000;
+const UPCOMING_DAYS = 5;
 
 /* ---------- Elements ---------- */
 
@@ -35,6 +36,14 @@ const currencySelect = document.querySelector('#currency');
 const incomeTotalEl = document.querySelector('#incomeTotal');
 const expenseTotalEl = document.querySelector('#expenseTotal');
 const netTotalEl = document.querySelector('#netTotal');
+const paidTotalEl = document.querySelector('#paidTotal');
+const remainingTotalEl = document.querySelector('#remainingTotal');
+const paidProgressBar = document.querySelector('#paidProgressBar');
+const paidProgressText = document.querySelector('#paidProgressText');
+const upcomingBtn = document.querySelector('#upcomingBtn');
+const upcomingDialog = document.querySelector('#upcomingDialog');
+const upcomingList = document.querySelector('#upcomingList');
+const closeUpcomingBtn = document.querySelector('#closeUpcomingBtn');
 const entriesList = document.querySelector('#entriesList');
 const clearAllBtn = document.querySelector('#clearAllBtn');
 const submitBtn = document.querySelector('#submitBtn');
@@ -66,6 +75,14 @@ function isValidISODate(value) {
 // Whole-day index, unaffected by daylight-saving shifts.
 const dayIndex = (date) =>
   Math.floor(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / MS_PER_DAY);
+
+function fromDayIndex(index) {
+  const d = new Date(index * MS_PER_DAY);
+  return new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate());
+}
+
+const addDays = (date, n) => new Date(date.getFullYear(), date.getMonth(), date.getDate() + n);
+const daysInMonth = (year, month) => new Date(year, month + 1, 0).getDate();
 
 const toCents = (amount) => Math.round(Number(amount) * 100);
 
@@ -106,6 +123,8 @@ function normalizeEntry(raw) {
     frequency: FREQUENCIES.includes(raw.frequency) ? raw.frequency : 'monthly',
     date: isValidISODate(raw.date) ? raw.date : null,
     notes: String(raw.notes ?? '').trim(),
+    // Dates (YYYY-MM-DD) of the occurrences that have been paid.
+    paid: Array.isArray(raw.paid) ? [...new Set(raw.paid.filter(isValidISODate))].sort() : [],
   };
 
   if (!entry.title || !entry.type || !entry.occurrence || !entry.date) return null;
@@ -155,44 +174,87 @@ function getSelectedMonth() {
   return monthFilter.value;
 }
 
-// How many times an entry falls within the given month (month is 0-based).
-function occurrencesInMonth(entry, year, month) {
+// Dates (YYYY-MM-DD) on which an entry falls between rangeStart and rangeEnd, inclusive.
+// Monthly/yearly entries on a day the month lacks (e.g. the 31st) fall on its last day.
+function occurrenceDates(entry, rangeStart, rangeEnd) {
   const start = parseLocalDate(entry.date);
-  const monthStart = new Date(year, month, 1);
-  const monthEnd = new Date(year, month + 1, 0);
-
-  if (start > monthEnd) return 0; // hasn't started yet
+  const from = start > rangeStart ? start : rangeStart;
+  if (from > rangeEnd) return []; // hasn't started yet
 
   if (entry.occurrence === 'one-off') {
-    return start.getFullYear() === year && start.getMonth() === month ? 1 : 0;
+    return start >= rangeStart ? [entry.date] : [];
   }
 
+  const dates = [];
+  const pushIfInRange = (date) => {
+    if (date >= from && date <= rangeEnd) dates.push(toISODate(date));
+  };
+
   switch (entry.frequency) {
-    case 'monthly':
-      return 1;
-    case 'yearly':
-      return start.getMonth() === month ? 1 : 0;
     case 'weekly': {
-      const s = dayIndex(start);
-      const a = dayIndex(monthStart);
-      const b = dayIndex(monthEnd);
-      const first = s >= a ? s : s + Math.ceil((a - s) / 7) * 7;
-      return first > b ? 0 : Math.floor((b - first) / 7) + 1;
+      let i = dayIndex(start);
+      const a = dayIndex(from);
+      if (i < a) i += Math.ceil((a - i) / 7) * 7;
+      for (const b = dayIndex(rangeEnd); i <= b; i += 7) dates.push(toISODate(fromDayIndex(i)));
+      break;
     }
-    default:
-      return 0;
+    case 'monthly':
+      for (let y = from.getFullYear(), m = from.getMonth(); new Date(y, m, 1) <= rangeEnd; m++) {
+        pushIfInRange(new Date(y, m, Math.min(start.getDate(), daysInMonth(y, m))));
+      }
+      break;
+    case 'yearly':
+      for (let y = from.getFullYear(); y <= rangeEnd.getFullYear(); y++) {
+        const m = start.getMonth();
+        pushIfInRange(new Date(y, m, Math.min(start.getDate(), daysInMonth(y, m))));
+      }
+      break;
   }
+  return dates;
 }
 
 function getMonthItems() {
   const [year, month] = getSelectedMonth().split('-').map(Number);
+  const monthStart = new Date(year, month - 1, 1);
+  const monthEnd = new Date(year, month, 0);
 
   return entries
-    .map((entry) => ({ entry, count: occurrencesInMonth(entry, year, month - 1) }))
+    .map((entry) => {
+      const dates = occurrenceDates(entry, monthStart, monthEnd);
+      return { entry, dates, count: dates.length };
+    })
     .filter((item) => item.count > 0)
     .sort((a, b) =>
       a.entry.date.localeCompare(b.entry.date) || a.entry.title.localeCompare(b.entry.title)
     );
+}
+
+/* ---------- Payments ---------- */
+
+const isPaid = (entry, date) => entry.paid.includes(date);
+
+function togglePaid(id, date) {
+  const entry = entries.find((item) => item.id === id);
+  if (!entry || entry.type !== 'expense' || !isValidISODate(date)) return;
+
+  entry.paid = isPaid(entry, date)
+    ? entry.paid.filter((d) => d !== date)
+    : [...entry.paid, date].sort();
+  saveEntries();
+  updateView();
+}
+
+// Every expense occurrence from today through the next UPCOMING_DAYS days.
+function getUpcomingPayments() {
+  const today = parseLocalDate(todayISO());
+  const end = addDays(today, UPCOMING_DAYS);
+
+  return entries
+    .filter((entry) => entry.type === 'expense')
+    .flatMap((entry) =>
+      occurrenceDates(entry, today, end).map((date) => ({ entry, date, paid: isPaid(entry, date) }))
+    )
+    .sort((a, b) => a.date.localeCompare(b.date) || a.entry.title.localeCompare(b.entry.title));
 }
 
 /* ---------- Formatting ---------- */
@@ -227,6 +289,15 @@ function formatCentsHTML(cents) {
 }
 
 const formatDate = (iso) => parseLocalDate(iso).toLocaleDateString();
+const formatShortDate = (iso) =>
+  parseLocalDate(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
+
+function describeDue(iso) {
+  const days = dayIndex(parseLocalDate(iso)) - dayIndex(parseLocalDate(todayISO()));
+  if (days === 0) return 'Due today';
+  if (days === 1) return 'Due tomorrow';
+  return `Due in ${days} days`;
+}
 
 function describeEntry(entry) {
   if (entry.occurrence === 'one-off') return formatDate(entry.date);
@@ -249,45 +320,86 @@ function applyTheme() {
 function renderSummary(items) {
   let income = 0;
   let expense = 0;
+  let paid = 0;
 
-  for (const { entry, count } of items) {
-    const cents = toCents(entry.amount) * count;
-    if (entry.type === 'income') income += cents;
-    else expense += cents;
+  for (const { entry, dates, count } of items) {
+    const unitCents = toCents(entry.amount);
+    if (entry.type === 'income') {
+      income += unitCents * count;
+    } else {
+      expense += unitCents * count;
+      paid += unitCents * dates.filter((date) => isPaid(entry, date)).length;
+    }
   }
 
   incomeTotalEl.innerHTML = formatCentsHTML(income);
   expenseTotalEl.innerHTML = formatCentsHTML(expense);
   netTotalEl.innerHTML = formatCentsHTML(income - expense);
+  paidTotalEl.innerHTML = formatCentsHTML(paid);
+  remainingTotalEl.innerHTML = formatCentsHTML(expense - paid);
+
+  const percent = expense ? Math.round((paid / expense) * 100) : 0;
+  paidProgressBar.style.width = `${percent}%`;
+  paidProgressText.textContent = expense ? `${percent}% of expenses paid` : 'No expenses this month';
 }
 
-function renderEntryItem({ entry, count }) {
+// Toggle button for one occurrence's paid state.
+function paidToggle(entry, date, className, text) {
+  const paid = isPaid(entry, date);
+  return `<button class="${className}${paid ? ' is-paid' : ''}" type="button"
+    data-id="${escapeHTML(entry.id)}" data-paid-date="${date}" aria-pressed="${paid}"
+    aria-label="Paid: ${escapeHTML(entry.title)}, ${escapeHTML(formatDate(date))}">${text(paid)}</button>`;
+}
+
+function renderEntryItem({ entry, dates, count }) {
+  const isExpense = entry.type === 'expense';
   const unitCents = toCents(entry.amount);
-  const signedTotal = (entry.type === 'expense' ? -1 : 1) * unitCents * count;
+  const signedTotal = (isExpense ? -1 : 1) * unitCents * count;
   const title = escapeHTML(entry.title);
   const id = escapeHTML(entry.id);
   const detail = count > 1
     ? `<span class="amount-detail">${count} × ${escapeHTML(formatCents(unitCents))}</span>`
     : '';
 
+  const paidCount = isExpense ? dates.filter((date) => isPaid(entry, date)).length : 0;
+  const allPaid = isExpense && paidCount === count;
+  let paidBadge = '';
+  if (allPaid) paidBadge = '<span class="badge paid">✓ Paid</span>';
+  else if (paidCount) paidBadge = `<span class="badge paid-partial">${paidCount}/${count} paid</span>`;
+
+  // A single payment gets one button; several (e.g. weekly) get one chip per date.
+  const singleToggle = isExpense && count === 1
+    ? paidToggle(entry, dates[0], 'paid-btn', (paid) => (paid ? '✓ Paid' : 'Mark paid'))
+    : '';
+  const chipRow = isExpense && count > 1
+    ? `<div class="paid-row">
+        <span class="paid-row-label">Mark each payment:</span>
+        ${dates.map((date) => paidToggle(entry, date, 'paid-chip',
+          (paid) => `${paid ? '✓ ' : ''}${escapeHTML(formatShortDate(date))}`)).join('')}
+      </div>`
+    : '';
+
   return `
-    <article class="entry-item">
+    <article class="entry-item${allPaid ? ' is-paid' : ''}">
       <div class="entry-main">
         <div class="entry-name-row">
           <span class="entry-name">${title}</span>
           <span class="badge ${entry.type}">${entry.type}</span>
           <span class="badge category">${escapeHTML(entry.category)}</span>
           <span class="badge ${entry.occurrence}">${entry.occurrence}</span>
+          ${paidBadge}
         </div>
         <div class="entry-meta">
           ${escapeHTML(describeEntry(entry))} • ${escapeHTML(entry.notes || 'No notes')}
         </div>
+        ${chipRow}
       </div>
       <div class="amount-block">
         <span class="amount-value ${entry.type}">${escapeHTML(formatCents(signedTotal, true))}</span>
         ${detail}
       </div>
       <div class="entry-actions">
+        ${singleToggle}
         <button class="edit-btn" data-id="${id}" type="button" aria-label="Edit ${title}">Edit</button>
         <button class="delete-btn" data-id="${id}" type="button" aria-label="Delete ${title}">Delete</button>
       </div>
@@ -312,10 +424,40 @@ function renderEntries(items) {
   entriesList.innerHTML = items.map(renderEntryItem).join('');
 }
 
+function renderUpcoming() {
+  const upcoming = getUpcomingPayments();
+  const unpaid = upcoming.filter((item) => !item.paid);
+  const unpaidCents = unpaid.reduce((sum, { entry }) => sum + toCents(entry.amount), 0);
+
+  upcomingBtn.innerHTML = unpaid.length
+    ? `<span class="upcoming-count">${unpaid.length}</span> due · ${escapeHTML(formatCents(unpaidCents))}`
+    : 'Nothing due';
+  upcomingBtn.classList.toggle('has-due', unpaid.length > 0);
+
+  if (!upcoming.length) {
+    upcomingList.innerHTML =
+      `<div class="empty-state"><p>No expenses due in the next ${UPCOMING_DAYS} days.</p></div>`;
+    return;
+  }
+
+  upcomingList.innerHTML = upcoming.map(({ entry, date, paid }) => `
+    <div class="upcoming-item${paid ? ' is-paid' : ''}">
+      <div class="entry-main">
+        <span class="entry-name">${escapeHTML(entry.title)}</span>
+        <span class="entry-meta">
+          ${describeDue(date)} • ${escapeHTML(formatDate(date))} • ${escapeHTML(entry.category)}
+        </span>
+      </div>
+      <span class="amount-value expense">${escapeHTML(formatCents(-toCents(entry.amount)))}</span>
+      ${paidToggle(entry, date, 'paid-btn', (isDone) => (isDone ? '✓ Paid' : 'Mark paid'))}
+    </div>`).join('');
+}
+
 function updateView() {
   const items = getMonthItems();
   renderSummary(items);
   renderEntries(items);
+  renderUpcoming();
   clearAllBtn.disabled = entries.length === 0;
 }
 
@@ -368,7 +510,9 @@ form.addEventListener('submit', (event) => {
   event.preventDefault();
 
   const occurrence = occurrenceSelect.value;
+  const existing = entries.find((entry) => entry.id === editingId);
   const candidate = normalizeEntry({
+    paid: existing ? existing.paid : [],
     id: editingId || makeId(),
     title: titleInput.value,
     amount: amountInput.value,
@@ -382,7 +526,7 @@ form.addEventListener('submit', (event) => {
 
   if (!candidate) return;
 
-  if (editingId && entries.some((entry) => entry.id === editingId)) {
+  if (existing) {
     entries = entries.map((entry) => (entry.id === editingId ? candidate : entry));
   } else {
     entries.push(candidate);
@@ -415,6 +559,12 @@ entriesList.addEventListener('click', (event) => {
     entries = createSampleEntries();
     saveEntries();
     updateView();
+    return;
+  }
+
+  const paidButton = event.target.closest('[data-paid-date]');
+  if (paidButton) {
+    togglePaid(paidButton.dataset.id, paidButton.dataset.paidDate);
     return;
   }
 
@@ -451,6 +601,23 @@ clearAllBtn.addEventListener('click', () => {
   saveEntries();
   resetForm();
   updateView();
+});
+
+upcomingBtn.addEventListener('click', () => upcomingDialog.showModal());
+closeUpcomingBtn.addEventListener('click', () => upcomingDialog.close());
+
+upcomingDialog.addEventListener('click', (event) => {
+  if (event.target === upcomingDialog) {
+    upcomingDialog.close(); // clicked the backdrop
+    return;
+  }
+  const paidButton = event.target.closest('[data-paid-date]');
+  if (paidButton) togglePaid(paidButton.dataset.id, paidButton.dataset.paidDate);
+});
+
+// Keeps "due today" current when the app is reopened on a later day.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') updateView();
 });
 
 /* ---------- Init ---------- */

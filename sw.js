@@ -1,6 +1,6 @@
 // Service worker: makes the app installable and usable offline.
 // Bump CACHE_VERSION whenever you change any of the files below.
-const CACHE_VERSION = 'v2';
+const CACHE_VERSION = 'v3';
 const CACHE_NAME = `budget-planner-${CACHE_VERSION}`;
 const APP_SHELL = [
   './',
